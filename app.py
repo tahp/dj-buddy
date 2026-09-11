@@ -59,7 +59,7 @@ app.config.update(
 def save_job(job):
     payload = {key: value for key, value in job.items() if key != "process"}
     with database() as db:
-        db.execute("INSERT OR REPLACE INTO download_jobs VALUES (?, ?)",
+        db.execute("INSERT INTO download_jobs VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
                    (job["id"], json.dumps(payload)))
 
 
@@ -298,6 +298,7 @@ def download_worker(job):
                 raise RuntimeError("Storage limit reached. Delete some downloads and try again.")
             job["deadline"] = time.monotonic() + app.config["JOB_TIMEOUT_SECONDS"]
             temp_dir.mkdir(parents=True, exist_ok=True)
+            Path(job["final_path"]).parent.mkdir(parents=True, exist_ok=True)
             update_job(job, status="running", stage="searching", progress=10, message="Checking track…")
             run_process(job, ["yt-dlp", "--ignore-config", "--no-playlist", "--skip-download",
                               "--write-info-json", "--socket-timeout", "15", "--retries", "2",

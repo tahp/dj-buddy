@@ -69,11 +69,14 @@ Use the **Docker** runtime with the repository root left blank. Render builds
 `Dockerfile` and uses its default command; no separate build or start command
 is needed. The image includes FFmpeg, yt-dlp, and Gunicorn.
 
-For stored files to survive redeploys, attach a persistent disk at `/var/data`
-and set `DATA_DIR=/var/data`. Without a disk, downloads are temporary.
+For Render Free, set `DATABASE_URL` to an external Postgres connection string
+(for example Neon). Account, invitation, and job records persist there; music
+stays temporary in `/tmp/data` and is saved to users’ devices. No persistent
+music disk is required. Without `DATABASE_URL`, local SQLite is used and will
+not survive an ephemeral server restart.
 
 This configuration must run **one Gunicorn worker and one service instance**.
-That process runs a serial queue, while SQLite persists jobs on the disk.
+That process runs a serial queue, while the configured database persists jobs.
 Queued jobs resume after restart; interrupted running jobs are marked failed
 with a retry message. The page restores your latest job after refresh.
 
@@ -95,18 +98,20 @@ in the same environment and with the same `DATA_DIR` as the running app:
 .venv/bin/flask --app app invite
 ```
 
-On Render, use `flask --app app invite` in the service shell. Share the code
-privately along with the app's `/join` page. Each tester chooses their own
-username and password. No email service is required.
+For Render Free, use the owner setup below instead of Shell. After setup,
+click **Invite testers** in the app to generate codes. Share each code privately
+with the `/join` page. Each tester chooses their own username and password.
+No email service is required.
 
 Set a random `SECRET_KEY` environment variable in Render before starting the
 service. The app refuses to start on Render without it. Use a password manager
 to generate a long random value. Keep it stable across deployments; changing
 it signs everyone out. Render sessions use HTTPS-only cookies.
 
-Accounts and invite records live in `DATA_DIR/accounts.sqlite3`, alongside
-user-specific download folders. Attach the persistent disk before creating
-accounts. Keep the database and session secret out of Git and Docker images.
+With `DATABASE_URL`, accounts, invites, and job records live in Postgres.
+Without it, they live in `DATA_DIR/accounts.sqlite3`. Connecting a new database
+does not migrate existing SQLite accounts; use owner setup to create the first
+account in the new database. Keep credentials out of Git and Docker images.
 
 Revoke an account and its existing sessions with:
 
@@ -122,3 +127,27 @@ Files saved to a device play offline without this server. Server storage is only
 for conversion and short transfer retries. On ephemeral hosting, a restart may
 remove temporary files earlier than the one-hour expiry; persistent account
 storage is still needed to retain users and invitations.
+
+## First owner account on Render Free (no Shell needed)
+
+1. Create an external Postgres database such as a Neon Free project. Copy its
+   connection string, keeping its TLS parameters (including `sslmode`).
+2. In Render → service → Environment, add `DATABASE_URL` with that connection
+   string. Keep your existing `SECRET_KEY` stable.
+3. Add `OWNER_INVITE_CODE`: use a password manager to generate a unique random
+   string of at least 32 characters. Save it privately. This code grants owner
+   access to the first account that redeems it; do not share it with testers.
+4. Save the environment changes and deploy. Open `/join`, use that code, and
+   choose your owner username and password. Then remove `OWNER_INVITE_CODE`
+   from Render's environment. The owner account remains in the database.
+5. Sign in and choose **Invite testers** to generate ordinary single-use codes.
+
+Owner setup is recorded once in the database. Restarting or changing the
+setup-code variable cannot create another owner. The owner code expires in
+seven days, like regular invites. Store it securely and complete setup promptly.
+On Render, owner setup requires `DATABASE_URL` to prevent ephemeral storage
+from resetting the bootstrap protection.
+
+The app still requires one service instance/worker. A shared Postgres database
+does not make the in-memory queue safe for multiple instances. This beta does
+not include a browser password-reset or account-revocation interface yet.

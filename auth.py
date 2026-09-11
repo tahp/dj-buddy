@@ -9,18 +9,42 @@ from datetime import timedelta
 from contextlib import contextmanager
 from pathlib import Path
 
+import psycopg
+from psycopg.rows import dict_row
+
 import click
 from flask import g, session, request, redirect, url_for, jsonify, render_template, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
+class Database:
+    """Use bound parameters with either SQLite or Postgres."""
+    def __init__(self, connection, postgres=False):
+        self.connection = connection
+        self.postgres = postgres
+
+    def execute(self, statement, parameters=()):
+        if self.postgres:
+            statement = statement.replace("?", "%s")
+        return self.connection.execute(statement, parameters)
+
+    def executescript(self, script):
+        for statement in script.split(";"):
+            if statement.strip():
+                self.execute(statement)
+
+
 @contextmanager
 def database():
-    connection = sqlite3.connect(current_app.config['AUTH_DATABASE'], timeout=15)
-    connection.row_factory = sqlite3.Row
+    url = current_app.config.get('DATABASE_URL')
+    if url:
+        connection = psycopg.connect(url, row_factory=dict_row, connect_timeout=10, prepare_threshold=None)
+    else:
+        connection = sqlite3.connect(current_app.config['AUTH_DATABASE'], timeout=15)
+        connection.row_factory = sqlite3.Row
     try:
         with connection:
-            yield connection
+            yield Database(connection, postgres=bool(url))
     finally:
         connection.close()
 
@@ -28,18 +52,49 @@ def database():
 def initialize_database():
     with database() as db:
         db.executescript('''
+            CREATE TABLE IF NOT EXISTS app_settings (name TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS administrators (user_id TEXT PRIMARY KEY);
             CREATE TABLE IF NOT EXISTS download_jobs (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1
             );
             CREATE TABLE IF NOT EXISTS invites (
-                digest TEXT PRIMARY KEY, expires REAL NOT NULL, used INTEGER NOT NULL DEFAULT 0
+                digest TEXT PRIMARY KEY, expires DOUBLE PRECISION NOT NULL, used INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS login_attempts (
-                username TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires REAL NOT NULL
+                username TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires DOUBLE PRECISION NOT NULL
             );
         ''')
+
+
+def create_invite():
+    code = secrets.token_urlsafe(24)
+    with database() as db:
+        db.execute('INSERT INTO invites(digest, expires) VALUES(?,?)',
+                   (hashlib.sha256(code.encode()).hexdigest(), time.time() + 7 * 86400))
+    return code
+
+
+def seed_owner_invite():
+    """Initialize one owner invite, without a public setup endpoint or shell."""
+    code = os.environ.get('OWNER_INVITE_CODE', '').strip()
+    if not code:
+        return
+    if os.environ.get('RENDER') and not current_app.config.get('DATABASE_URL'):
+        raise RuntimeError('Set DATABASE_URL before OWNER_INVITE_CODE on Render so owner setup is persistent.')
+    if len(code) < 32:
+        raise RuntimeError('OWNER_INVITE_CODE must contain at least 32 characters.')
+    digest = hashlib.sha256(code.encode()).hexdigest()
+    with database() as db:
+        # A durable marker prevents changing the environment variable from creating
+        # additional owners. The invite itself is consumed in the signup transaction.
+        claimed = db.execute(
+            "INSERT INTO app_settings(name, value) VALUES('owner_invite', ?) ON CONFLICT(name) DO NOTHING",
+            (digest,))
+        if claimed.rowcount:
+            db.execute('INSERT INTO invites(digest, expires) VALUES(?,?)',
+                       (digest, time.time() + 7 * 86400))
 
 
 def csrf_token():
@@ -63,6 +118,7 @@ def init_auth(app, data_dir):
     app.config.update(
         SECRET_KEY=secret,
         AUTH_DATABASE=os.path.join(data_dir, 'accounts.sqlite3'),
+        DATABASE_URL=os.environ.get('DATABASE_URL') or None,
         SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax',
         SESSION_COOKIE_SECURE=bool(os.environ.get('RENDER')),
         PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
@@ -70,15 +126,19 @@ def init_auth(app, data_dir):
     )
     with app.app_context():
         initialize_database()
+        seed_owner_invite()
     app.jinja_env.globals['csrf_token'] = csrf_token
 
     @app.before_request
     def authenticate():
+        g.is_admin = False
         g.user = None
         if session.get('user_id'):
             with database() as db:
                 g.user = db.execute('SELECT id, username FROM users WHERE id=? AND active=1',
                                     (session['user_id'],)).fetchone()
+                if g.user:
+                    g.is_admin = db.execute('SELECT user_id FROM administrators WHERE user_id=?', (g.user['id'],)).fetchone() is not None
         
         public_endpoints = ('login', 'join', 'static', 'health')
         if request.endpoint not in public_endpoints and not g.user:
@@ -117,7 +177,7 @@ def init_auth(app, data_dir):
                 if attempt and attempt['attempts'] >= 10:
                     return render_template('auth.html', mode='login', error='Too many attempts. Try again in 15 minutes.'), 429
                 db.execute('''INSERT INTO login_attempts VALUES (?, 1, ?)
-                    ON CONFLICT(username) DO UPDATE SET attempts=attempts+1''', (username, now + 900))
+                    ON CONFLICT(username) DO UPDATE SET attempts=login_attempts.attempts+1''', (username, now + 900))
             with database() as db:
                 user = db.execute('SELECT * FROM users WHERE username=? AND active=1', (username,)).fetchone()
             if user and check_password_hash(user['password_hash'], password):
@@ -160,7 +220,10 @@ def init_auth(app, data_dir):
                             else:
                                 db.execute('INSERT INTO users(id, username, password_hash) VALUES(?,?,?)',
                                            (user_id, username, password_hash))
-                    except sqlite3.IntegrityError:
+                                bootstrap = db.execute("SELECT value FROM app_settings WHERE name='owner_invite'").fetchone()
+                                if bootstrap and secrets.compare_digest(bootstrap['value'], digest):
+                                    db.execute('INSERT INTO administrators(user_id) VALUES(?)', (user_id,))
+                    except (sqlite3.IntegrityError, psycopg.IntegrityError):
                         error = 'That username is already taken.'
                     if not error:
                         session.clear()
@@ -174,13 +237,17 @@ def init_auth(app, data_dir):
         session.clear()
         return redirect(url_for('login'))
 
+    @app.route('/admin/invites', methods=['GET', 'POST'])
+    def admin_invites():
+        if not g.is_admin:
+            return render_template('forbidden.html'), 403
+        code = create_invite() if request.method == 'POST' else None
+        return render_template('invites.html', code=code)
+
     @app.cli.command('invite')
     def invite_command():
         """Create a single-use invite code valid for seven days."""
-        code = secrets.token_urlsafe(24)
-        with database() as db:
-            db.execute('INSERT INTO invites(digest, expires) VALUES(?,?)',
-                       (hashlib.sha256(code.encode()).hexdigest(), time.time() + 7 * 86400))
+        code = create_invite()
         click.echo('Single-use invite code (expires in 7 days):')
         click.echo(code)
 

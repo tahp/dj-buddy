@@ -23,6 +23,7 @@
 <div class="page">
     <div class="account-bar">
         <span>Signed in as {{ g.user['username'] }}</span>
+        {% if g.is_admin %}<a class="history-download" href="{{ url_for('admin_invites') }}">Invite testers</a>{% endif %}
         <form action="{{ url_for('logout') }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="history-delete" type="submit">Sign out</button>

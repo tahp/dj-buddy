@@ -12,7 +12,7 @@ class AccountTestMixin:
         super().setUp()
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.patch_config = patch.dict(app.app.config, TESTING=True, AUTH_DATABASE=str(Path(tmp.name) / 'accounts.sqlite3'))
+        self.patch_config = patch.dict(app.app.config, TESTING=True, DATABASE_URL=None, AUTH_DATABASE=str(Path(tmp.name) / 'accounts.sqlite3'))
         self.patch_config.start()
         self.addCleanup(self.patch_config.stop)
         self.patch_downloads = patch.object(app, 'DOWNLOADS_DIR', str(Path(tmp.name) / 'downloads'))

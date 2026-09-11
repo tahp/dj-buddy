@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invite testers · RequestAssistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<main class="page auth-page">
+    <a class="history-download" href="{{ url_for('index') }}">← Back to tracks</a>
+    <div class="hero"><h1>Invite testers.</h1><p>Create a single-use code for someone joining the beta.</p></div>
+    {% if code %}
+    <div class="search-panel">
+        <label for="inviteCode">New invite code</label>
+        <input id="inviteCode" class="search-input" readonly value="{{ code }}" style="width:100%;margin-top:12px">
+        <p class="results-message">Copy this code now. It is shown only in this response and expires in 7 days. Share it privately with the tester and send them to this app’s /join page.</p>
+    </div>
+    {% endif %}
+    <form method="post" class="auth-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="search-button" type="submit">Create invite code</button>
+    </form>
+</main>
+</body>
+</html>

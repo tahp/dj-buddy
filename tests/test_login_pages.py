@@ -24,7 +24,7 @@ assert client.get('/').status_code == 302
 assert client.get('/static/css/style.css').status_code == 200
 '''],
                 cwd=Path(__file__).resolve().parents[1],
-                env={**os.environ, 'DATA_DIR': directory},
+                env={**os.environ, 'DATA_DIR': directory, 'DATABASE_URL': '', 'OWNER_INVITE_CODE': ''},
                 capture_output=True, text=True,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
