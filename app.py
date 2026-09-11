@@ -529,6 +529,37 @@ def download_file(filename):
     )
 
 
+@app.route("/delete/<filename>", methods=["DELETE"])
+def delete_file(filename):
+    if (
+        filename != os.path.basename(filename)
+        or "\\" in filename
+        or not filename.lower().endswith(".mp3")
+    ):
+        return jsonify({"error": "Invalid filename"}), 400
+
+    path = os.path.join(DOWNLOADS_DIR, filename)
+    with jobs_lock:
+        if any(
+            job["filename"] == filename
+            and (job["status"] in ("queued", "running") or job.get("process"))
+            for job in jobs.values()
+        ):
+            return jsonify({"error": "This track is still being processed."}), 409
+
+        if os.path.islink(path) or not os.path.isfile(path):
+            return jsonify({"error": "Download not found"}), 404
+
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            return jsonify({"error": "Download not found"}), 404
+        except OSError:
+            return jsonify({"error": "Unable to delete download."}), 500
+
+    return jsonify({"success": True})
+
+
 @app.route("/history")
 def history():
 

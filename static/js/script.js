@@ -396,6 +396,10 @@ async function loadHistory() {
 
         const files = await response.json();
 
+        if (!response.ok) {
+            throw new Error(files.error || "Unable to load downloads.");
+        }
+
         const list = document.getElementById(
             "historyList"
         );
@@ -439,12 +443,55 @@ async function loadHistory() {
                     >
                         Download
                     </a>
+                    <button type="button" class="history-delete">
+                        Delete
+                    </button>
                 </div>
             `;
         }).join("");
 
+        list.querySelectorAll(".history-delete").forEach((button, index) => {
+            const filename = files[index].filename;
+            button.setAttribute("aria-label", "Delete " + filename);
+            button.addEventListener("click", () => deleteDownload(filename, button));
+        });
+
     } catch (error) {
         console.error(error);
+        showError(error.message);
+    }
+}
+
+
+async function deleteDownload(filename, button) {
+    if (!window.confirm(`Delete "${filename}" from downloads? This cannot be undone.`)) {
+        return;
+    }
+
+    hideError();
+    button.disabled = true;
+    button.textContent = "Deleting…";
+
+    try {
+        const response = await fetch("/delete/" + encodeURIComponent(filename), {
+            method: "DELETE"
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || "Unable to delete download.");
+        }
+
+        if (document.getElementById("filename").textContent === filename) {
+            document.getElementById("completeBox").style.display = "none";
+            document.getElementById("downloadLink").removeAttribute("href");
+            document.getElementById("jobMessage").textContent = "Downloaded file deleted.";
+        }
+        await loadHistory();
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        button.disabled = false;
+        button.textContent = "Delete";
     }
 }
 

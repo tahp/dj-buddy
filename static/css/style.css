@@ -561,6 +561,31 @@ body {
     font-size: 13px;
 }
 
+.history-delete {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--danger);
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.history-delete:hover {
+    background: rgba(255, 84, 112, 0.1);
+}
+
+.history-delete:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
+.history-delete:focus-visible {
+    outline: 2px solid var(--danger);
+    outline-offset: 2px;
+}
+
 
 /* --------------------------------
    ERROR
