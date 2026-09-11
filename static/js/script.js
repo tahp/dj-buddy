@@ -1,3 +1,14 @@
+async function apiFetch(url, options = {}) {
+    const headers = new Headers(options.headers || {});
+    headers.set("X-CSRF-Token", document.querySelector('meta[name="csrf-token"]').content);
+    const response = await fetch(url, {...options, headers});
+    if (response.status === 401) {
+        window.location.assign("/login");
+        throw new Error("Please sign in again.");
+    }
+    return response;
+}
+
 let currentJobId = null;
 let pollingTimer = null;
 
@@ -19,6 +30,7 @@ document
    START SEARCH
 -------------------------------- */
 
+let restoringJob = true;
 let searchPending = false;
 let downloadPending = false;
 let activePreview = null;
@@ -55,7 +67,7 @@ function togglePreview(track, card, button) {
 }
 
 async function startSearch() {
-    if (searchPending || downloadPending) return;
+    if (restoringJob || searchPending || downloadPending) return;
     const title = document.getElementById("songInput").value.trim();
     if (!title) {
         showError("Enter an artist or track name.");
@@ -72,7 +84,7 @@ async function startSearch() {
     document.getElementById("resultsPanel").hidden = false;
     document.getElementById("resultsMessage").textContent = "Finding tracks…";
     try {
-        const response = await fetch("/search", {
+        const response = await apiFetch("/search", {
             method: "POST", headers: {"Content-Type": "application/json"},
             body: JSON.stringify({song_title: title})
         });
@@ -120,7 +132,7 @@ async function startSearch() {
 }
 
 async function startDownload(track) {
-    if (downloadPending || searchPending) return;
+    if (restoringJob || downloadPending || searchPending) return;
     closePreview();
     downloadPending = true;
     const title = track.title;
@@ -139,7 +151,7 @@ async function startDownload(track) {
     resetSteps();
 
     try {
-        const response = await fetch("/jobs", {
+        const response = await apiFetch("/jobs", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -183,7 +195,7 @@ async function pollStatus() {
     }
 
     try {
-        const response = await fetch(
+        const response = await apiFetch(
             "/status/" + currentJobId
         );
 
@@ -250,6 +262,8 @@ async function pollStatus() {
 -------------------------------- */
 
 function updateJobUI(job) {
+    document.getElementById("trackTitle").textContent = job.title;
+    document.getElementById("cancelBtn").style.display = ["queued", "running"].includes(job.status) ? "block" : "none";
     setProgress(job.progress);
 
     document.getElementById(
@@ -393,6 +407,11 @@ function finishJob(job) {
         "searchBtn"
     ).disabled = false;
 
+    if (!job.file_available) {
+        document.getElementById("completeBox").style.display = "none";
+        document.getElementById("downloadLink").removeAttribute("href");
+        document.getElementById("jobMessage").textContent = "This download was deleted or expired.";
+    }
     loadHistory();
 }
 
@@ -402,39 +421,16 @@ function finishJob(job) {
 -------------------------------- */
 
 async function cancelJob() {
-    if (!currentJobId) {
-        return;
-    }
-
+    if (!currentJobId) return;
     try {
-        await fetch(
-            "/cancel/" + currentJobId,
-            {
-                method: "POST"
-            }
-        );
-
-        downloadPending = false;
-        clearTimeout(
-            pollingTimer
-        );
-
-        document.getElementById(
-            "jobMessage"
-        ).textContent = "Cancelled.";
-
-        document.getElementById(
-            "cancelBtn"
-        ).style.display = "none";
-
-        document.getElementById(
-            "searchBtn"
-        ).disabled = false;
-
+        const response = await apiFetch("/cancel/" + currentJobId, {method: "POST"});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to cancel job.");
+        document.getElementById("jobMessage").textContent = "Cancelling…";
+        document.getElementById("cancelBtn").style.display = "none";
+        // Keep polling until the server has stopped the process and cleaned up.
     } catch (error) {
-        showError(
-            "Unable to cancel job."
-        );
+        showError(error.message);
     }
 }
 
@@ -496,7 +492,7 @@ function toggleLog() {
 
 async function loadHistory() {
     try {
-        const response = await fetch(
+        const response = await apiFetch(
             "/history"
         );
 
@@ -579,7 +575,7 @@ async function deleteDownload(filename, button) {
     button.textContent = "Deleting…";
 
     try {
-        const response = await fetch("/delete/" + encodeURIComponent(filename), {
+        const response = await apiFetch("/delete/" + encodeURIComponent(filename), {
             method: "DELETE"
         });
         const data = await response.json();
@@ -669,7 +665,27 @@ function hideError() {
    LOAD
 -------------------------------- */
 
+async function restoreCurrentJob() {
+    try {
+        const response = await apiFetch("/jobs/current");
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to restore download status.");
+        if (data.job_id) {
+            currentJobId = data.job_id;
+            downloadPending = true;
+            document.getElementById("jobCard").style.display = "block";
+            document.getElementById("searchBtn").disabled = true;
+            await pollStatus();
+        }
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        restoringJob = false;
+    }
+}
+
 loadHistory();
+restoreCurrentJob();
 
 document.getElementById(
     "songInput"

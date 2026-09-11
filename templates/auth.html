@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ 'Join the beta' if mode == 'join' else 'Sign in' }} · RequestAssistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<main class="page auth-page">
+    <div class="logo"><div class="logo-icon">♫</div><div class="logo-text">RequestAssistant</div></div>
+    <div class="hero">
+        <h1>{{ 'Join the beta.' if mode == 'join' else 'Welcome back.' }}</h1>
+        <p>{{ 'Use your invite code to create your private account.' if mode == 'join' else 'Sign in to find tracks and manage your downloads.' }}</p>
+    </div>
+    <form method="post" class="search-panel auth-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if error %}<p class="auth-error" role="alert">{{ error }}</p>{% endif %}
+        {% if mode == 'join' %}
+        <label for="invite">Invite code</label>
+        <input class="search-input" id="invite" name="invite" required autocomplete="off">
+        {% endif %}
+        <label for="username">Username</label>
+        <input class="search-input" id="username" name="username" required autocomplete="username" maxlength="40" autocapitalize="none" spellcheck="false">
+        <label for="password">Password</label>
+        <input class="search-input" id="password" name="password" type="password" required autocomplete="{{ 'new-password' if mode == 'join' else 'current-password' }}" {% if mode == 'join' %}minlength="12"{% endif %} maxlength="256">
+        {% if mode == 'join' %}<p class="results-message">Use at least 12 characters.</p>{% endif %}
+        <button class="search-button" type="submit">{{ 'Create account' if mode == 'join' else 'Sign in' }}</button>
+    </form>
+    <p class="results-message">
+        {% if mode == 'join' %}Already have an account? <a class="history-download" href="{{ url_for('login') }}">Sign in</a>
+        {% else %}Have an invite code? <a class="history-download" href="{{ url_for('join') }}">Join the beta</a>{% endif %}
+    </p>
+</main>
+</body>
+</html>

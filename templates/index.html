@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <meta
         name="viewport"
@@ -20,6 +21,13 @@
 <body>
 
 <div class="page">
+    <div class="account-bar">
+        <span>Signed in as {{ g.user['username'] }}</span>
+        <form action="{{ url_for('logout') }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="history-delete" type="submit">Sign out</button>
+        </form>
+    </div>
 
     <div class="logo">
         <div class="logo-icon">
@@ -49,6 +57,8 @@
         </p>
     </div>
 
+
+    <p class="results-message">Private beta · Tracks up to 15 minutes · 500 MB per account · Downloads expire after 7 days</p>
 
     <div class="search-panel">
 
