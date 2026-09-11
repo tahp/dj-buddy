@@ -1,0 +1,616 @@
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    --bg: #08090d;
+    --panel: #11131a;
+    --panel-hover: #171a23;
+    --border: #242733;
+    --text: #f5f6fa;
+    --muted: #8d93a5;
+    --accent: #7c5cff;
+    --accent-hover: #927cff;
+    --success: #36d399;
+    --danger: #ff5470;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+
+    background:
+        radial-gradient(
+            circle at top,
+            #17142c 0%,
+            var(--bg) 35%
+        );
+
+    color: var(--text);
+
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Helvetica,
+        Arial,
+        sans-serif;
+}
+
+.page {
+    width: 100%;
+    max-width: 850px;
+    margin: auto;
+    padding: 60px 20px 100px;
+}
+
+
+/* --------------------------------
+   HEADER
+-------------------------------- */
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 45px;
+}
+
+.logo-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 45px;
+    height: 45px;
+
+    border-radius: 12px;
+
+    background: var(--accent);
+
+    font-size: 22px;
+}
+
+.logo-text {
+    font-size: 21px;
+    font-weight: 700;
+}
+
+.logo-subtitle {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+
+/* --------------------------------
+   HERO
+-------------------------------- */
+
+.hero {
+    margin-bottom: 28px;
+}
+
+.hero h1 {
+    font-size: clamp(32px, 7vw, 52px);
+    line-height: 1.05;
+    letter-spacing: -2px;
+    margin: 0 0 12px;
+}
+
+.hero p {
+    color: var(--muted);
+    font-size: 16px;
+    margin: 0;
+}
+
+
+/* --------------------------------
+   SEARCH
+-------------------------------- */
+
+.search-panel {
+    background: rgba(17, 19, 26, 0.92);
+
+    border: 1px solid var(--border);
+    border-radius: 18px;
+
+    padding: 18px;
+
+    backdrop-filter: blur(14px);
+}
+
+.search-row {
+    display: flex;
+    gap: 10px;
+}
+
+.search-input {
+    flex: 1;
+    min-width: 0;
+    height: 52px;
+
+    border: 1px solid var(--border);
+    border-radius: 12px;
+
+    outline: none;
+
+    background: #0b0d12;
+    color: var(--text);
+
+    padding: 0 17px;
+
+    font-size: 16px;
+
+    transition: 0.2s;
+}
+
+.search-input:focus {
+    border-color: var(--accent);
+
+    box-shadow:
+        0 0 0 3px
+        rgba(124, 92, 255, 0.12);
+}
+
+.search-button {
+    height: 52px;
+
+    padding: 0 25px;
+
+    border: 0;
+    border-radius: 12px;
+
+    background: var(--accent);
+
+    color: white;
+
+    font-weight: 650;
+    font-size: 15px;
+
+    cursor: pointer;
+
+    transition: 0.2s;
+}
+
+.search-button:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.search-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+
+/* --------------------------------
+   CURRENT JOB
+-------------------------------- */
+
+.job-card {
+    display: none;
+
+    margin-top: 22px;
+
+    background: var(--panel);
+
+    border: 1px solid var(--border);
+    border-radius: 18px;
+
+    padding: 24px;
+}
+
+.track-title {
+    font-size: 19px;
+    font-weight: 650;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    margin-bottom: 8px;
+}
+
+.job-message {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+
+/* --------------------------------
+   PROGRESS
+-------------------------------- */
+
+.progress-wrapper {
+    width: 100%;
+    height: 8px;
+
+    background: #262936;
+
+    border-radius: 99px;
+
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0%;
+
+    background:
+        linear-gradient(
+            90deg,
+            #6647ff,
+            #967cff
+        );
+
+    border-radius: inherit;
+
+    transition: width 0.3s ease;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+
+    margin-top: 9px;
+
+    font-size: 12px;
+    color: var(--muted);
+}
+
+
+/* --------------------------------
+   STEPS
+-------------------------------- */
+
+.steps {
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    gap: 8px;
+
+    margin-top: 28px;
+}
+
+.step {
+    text-align: center;
+
+    font-size: 12px;
+
+    color: #5f6473;
+}
+
+.step-dot {
+    width: 9px;
+    height: 9px;
+
+    border-radius: 50%;
+
+    background: #404453;
+
+    margin: 0 auto 8px;
+}
+
+.step.active {
+    color: var(--text);
+}
+
+.step.active .step-dot {
+    background: var(--accent);
+
+    box-shadow:
+        0 0 0 5px
+        rgba(124, 92, 255, 0.12);
+}
+
+.step.complete {
+    color: var(--success);
+}
+
+.step.complete .step-dot {
+    background: var(--success);
+}
+
+
+/* --------------------------------
+   ACTIONS
+-------------------------------- */
+
+.actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 25px;
+}
+
+.action-button {
+    flex: 1;
+
+    height: 45px;
+
+    border-radius: 10px;
+
+    border: 1px solid var(--border);
+
+    color: var(--text);
+
+    background: #171921;
+
+    cursor: pointer;
+
+    font-weight: 600;
+}
+
+.action-button:hover {
+    background: var(--panel-hover);
+}
+
+.cancel-button {
+    color: var(--danger);
+}
+
+
+/* --------------------------------
+   COMPLETE
+-------------------------------- */
+
+.complete-box {
+    display: none;
+
+    margin-top: 22px;
+
+    border:
+        1px solid
+        rgba(54, 211, 153, 0.25);
+
+    background:
+        rgba(54, 211, 153, 0.06);
+
+    border-radius: 14px;
+
+    padding: 18px;
+}
+
+.complete-title {
+    color: var(--success);
+
+    font-weight: 700;
+
+    margin-bottom: 8px;
+}
+
+.filename {
+    color: var(--muted);
+
+    font-size: 13px;
+
+    overflow-wrap: anywhere;
+}
+
+.download-button {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    text-decoration: none;
+
+    height: 44px;
+
+    padding: 0 20px;
+
+    background: var(--success);
+
+    color: #07110d;
+
+    border-radius: 10px;
+
+    font-weight: 700;
+
+    margin-top: 15px;
+}
+
+
+/* --------------------------------
+   TECHNICAL LOG
+-------------------------------- */
+
+.log-toggle {
+    margin-top: 20px;
+
+    background: transparent;
+
+    border: 0;
+
+    padding: 0;
+
+    color: var(--muted);
+
+    cursor: pointer;
+}
+
+.log {
+    display: none;
+
+    margin-top: 15px;
+
+    background: #050608;
+
+    border: 1px solid var(--border);
+
+    border-radius: 10px;
+
+    padding: 15px;
+
+    max-height: 280px;
+
+    overflow-y: auto;
+
+    white-space: pre-wrap;
+
+    word-break: break-word;
+
+    font-family:
+        "SFMono-Regular",
+        Consolas,
+        monospace;
+
+    font-size: 11px;
+
+    line-height: 1.55;
+
+    color: #9ea4b6;
+}
+
+
+/* --------------------------------
+   HISTORY
+-------------------------------- */
+
+.history {
+    margin-top: 50px;
+}
+
+.section-title {
+    font-size: 13px;
+
+    letter-spacing: 0.7px;
+
+    text-transform: uppercase;
+
+    color: var(--muted);
+
+    margin-bottom: 12px;
+}
+
+.history-list {
+    border: 1px solid var(--border);
+
+    border-radius: 14px;
+
+    overflow: hidden;
+}
+
+.history-item {
+    display: flex;
+
+    align-items: center;
+
+    gap: 13px;
+
+    padding: 14px 16px;
+
+    border-bottom:
+        1px solid var(--border);
+
+    background:
+        rgba(17, 19, 26, 0.8);
+}
+
+.history-item:last-child {
+    border-bottom: 0;
+}
+
+.history-icon {
+    width: 35px;
+    height: 35px;
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 8px;
+
+    background: #1d202a;
+}
+
+.history-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.history-name {
+    font-size: 14px;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+}
+
+.history-size {
+    margin-top: 3px;
+
+    color: var(--muted);
+
+    font-size: 11px;
+}
+
+.history-download {
+    color: var(--accent-hover);
+
+    text-decoration: none;
+
+    font-size: 13px;
+}
+
+
+/* --------------------------------
+   ERROR
+-------------------------------- */
+
+.error-box {
+    display: none;
+
+    margin-top: 20px;
+
+    padding: 15px;
+
+    border:
+        1px solid
+        rgba(255, 84, 112, 0.3);
+
+    background:
+        rgba(255, 84, 112, 0.07);
+
+    color: #ff7c91;
+
+    border-radius: 10px;
+
+    font-size: 13px;
+}
+
+
+/* --------------------------------
+   MOBILE
+-------------------------------- */
+
+@media (max-width: 600px) {
+
+    .page {
+        padding: 35px 15px 80px;
+    }
+
+    .search-row {
+        flex-direction: column;
+    }
+
+    .search-button {
+        width: 100%;
+    }
+
+    .steps {
+        font-size: 10px;
+    }
+
+    .step {
+        font-size: 10px;
+    }
+}

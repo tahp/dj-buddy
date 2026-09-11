@@ -1,6 +1,6 @@
-# DJ Buddy
+# RequestAssistant
 
-DJ Buddy is a lightweight Flask-based track downloader with a modern, DJ-focused web interface.
+RequestAssistant is a lightweight Flask-based track downloader with a modern, DJ-focused web interface.
 
 It uses `yt-dlp` to locate and download audio and FFmpeg to convert tracks to high-quality 320 kbps MP3 files.
 

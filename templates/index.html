@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>RequestAssistant</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+</head>
+
+<body>
+
+<div class="page">
+
+    <div class="logo">
+        <div class="logo-icon">
+            ♫
+        </div>
+
+        <div>
+            <div class="logo-text">
+                RequestAssistant
+            </div>
+
+            <div class="logo-subtitle">
+                Track downloader
+            </div>
+        </div>
+    </div>
+
+
+    <div class="hero">
+        <h1>
+            Grab your next track.
+        </h1>
+
+        <p>
+            Search a track and convert it
+            to a high-quality MP3.
+        </p>
+    </div>
+
+
+    <div class="search-panel">
+
+        <div class="search-row">
+
+            <input
+                id="songInput"
+                class="search-input"
+                type="text"
+                autocomplete="off"
+                placeholder="Artist - Track"
+            >
+
+            <button
+                id="searchBtn"
+                class="search-button"
+                onclick="startSearch()"
+            >
+                Download
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <div
+        id="errorBox"
+        class="error-box"
+    ></div>
+
+
+    <div
+        id="jobCard"
+        class="job-card"
+    >
+
+        <div
+            id="trackTitle"
+            class="track-title"
+        ></div>
+
+        <div
+            id="jobMessage"
+            class="job-message"
+        >
+            Preparing...
+        </div>
+
+
+        <div class="progress-wrapper">
+            <div
+                id="progressBar"
+                class="progress-bar"
+            ></div>
+        </div>
+
+
+        <div class="progress-info">
+            <span id="stageText">
+                Starting
+            </span>
+
+            <span id="progressText">
+                0%
+            </span>
+        </div>
+
+
+        <div class="steps">
+
+            <div
+                id="step-search"
+                class="step"
+            >
+                <div class="step-dot"></div>
+                Find
+            </div>
+
+
+            <div
+                id="step-download"
+                class="step"
+            >
+                <div class="step-dot"></div>
+                Download
+            </div>
+
+
+            <div
+                id="step-convert"
+                class="step"
+            >
+                <div class="step-dot"></div>
+                Convert
+            </div>
+
+
+            <div
+                id="step-finish"
+                class="step"
+            >
+                <div class="step-dot"></div>
+                Done
+            </div>
+
+        </div>
+
+
+        <div
+            id="completeBox"
+            class="complete-box"
+        >
+
+            <div class="complete-title">
+                ✓ Download complete
+            </div>
+
+            <div
+                id="filename"
+                class="filename"
+            ></div>
+
+            <a
+                id="downloadLink"
+                class="download-button"
+            >
+                Download MP3
+            </a>
+
+        </div>
+
+
+        <div class="actions">
+
+            <button
+                id="cancelBtn"
+                class="action-button cancel-button"
+                onclick="cancelJob()"
+            >
+                Cancel
+            </button>
+
+            <button
+                class="action-button"
+                onclick="resetSearch()"
+            >
+                New Search
+            </button>
+
+        </div>
+
+
+        <button
+            class="log-toggle"
+            onclick="toggleLog()"
+        >
+            ▸ Technical log
+        </button>
+
+
+        <div
+            id="log"
+            class="log"
+        ></div>
+
+    </div>
+
+
+    <div class="history">
+
+        <div class="section-title">
+            Recent Downloads
+        </div>
+
+        <div
+            id="historyList"
+            class="history-list"
+        >
+
+            <div class="history-item">
+
+                <div class="history-info">
+                    <div class="history-size">
+                        No downloads yet
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<script
+    src="{{ url_for('static', filename='js/script.js') }}"
+></script>
+
+</body>
+</html>
