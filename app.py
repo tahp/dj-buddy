@@ -6,6 +6,7 @@ from flask import (
     render_template
 )
 
+import json
 import subprocess
 import os
 import uuid
@@ -41,7 +42,7 @@ def sanitize_filename(name):
     return name.strip()
 
 
-def create_job(song_title):
+def create_job(song_title, video_id):
     job_id = str(uuid.uuid4())[:8]
 
     clean_title = sanitize_filename(song_title)
@@ -69,6 +70,7 @@ def create_job(song_title):
     job = {
         "id": job_id,
         "title": song_title,
+        "source_url": f"https://www.youtube.com/watch?v={video_id}",
         "filename": filename,
         "final_path": final_path,
         "temp_template": temp_template,
@@ -187,8 +189,10 @@ def download_worker(job):
         yt_command = [
             "yt-dlp",
 
-            # First search result
-            f"ytsearch1:{job['title']}",
+            # Download the exact selected result
+            job["source_url"],
+            "--ignore-config",
+            "--no-playlist",
 
             # Extract best available audio
             "-f",
@@ -422,25 +426,46 @@ def download_worker(job):
 
 @app.route("/search", methods=["POST"])
 def search():
+    data = request.get_json(silent=True)
+    title = data.get("song_title") if isinstance(data, dict) else None
+    if not isinstance(title, str) or not title.strip() or len(title) > 300:
+        return jsonify({"error": "Enter an artist or track name (up to 300 characters)."}), 400
+    try:
+        result = subprocess.run(
+            ["yt-dlp", "--ignore-config", "--flat-playlist", "--dump-single-json",
+             "--no-warnings", "--socket-timeout", "15", f"ytsearch5:{title.strip()}"],
+            capture_output=True, text=True, timeout=40, check=True
+        )
+        entries = json.loads(result.stdout).get("entries", [])
+        tracks = []
+        for entry in entries:
+            if not entry or not re.fullmatch(r"[A-Za-z0-9_-]{11}", entry.get("id", "")):
+                continue
+            tracks.append({
+                "id": entry["id"], "title": entry.get("title") or "Untitled track",
+                "uploader": entry.get("uploader") or entry.get("channel") or "Unknown uploader",
+                "duration": entry.get("duration")
+            })
+        return jsonify({"results": tracks})
+    except FileNotFoundError:
+        return jsonify({"error": "yt-dlp is missing. Install it before searching."}), 503
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Search timed out. Please try again."}), 504
+    except (subprocess.CalledProcessError, ValueError):
+        return jsonify({"error": "Search is unavailable right now. Please try again."}), 502
 
-    data = request.get_json(
-        silent=True
-    ) or {}
 
-    song_title = data.get(
-        "song_title",
-        ""
-    ).strip()
-
-    if not song_title:
-        return jsonify({
-            "error":
-            "No song title provided"
-        }), 400
-
-    job = create_job(
-        song_title
-    )
+@app.route("/jobs", methods=["POST"])
+def start_download():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Choose a search result first."}), 400
+    song_title = data.get("song_title")
+    video_id = data.get("video_id")
+    if (not isinstance(song_title, str) or not song_title.strip() or len(song_title) > 300
+            or not isinstance(video_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id)):
+        return jsonify({"error": "Choose a valid search result."}), 400
+    job = create_job(song_title.strip(), video_id)
 
     thread = threading.Thread(
         target=download_worker,

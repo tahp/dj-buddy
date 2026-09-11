@@ -639,3 +639,21 @@ body {
         font-size: 10px;
     }
 }
+
+.results-panel { margin-top: 28px; }
+.results-message { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.result-card { padding: 18px; margin-top: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
+.result-title { font-weight: 600; overflow-wrap: anywhere; }
+.result-actions { display: flex; align-items: center; gap: 18px; margin-top: 14px; flex-wrap: wrap; }
+.result-actions .action-button { flex: none; padding: 0 16px; }
+
+.track-preview { margin-top: 16px; }
+.track-preview iframe {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    min-height: 200px;
+    border: 0;
+    border-radius: 10px;
+    background: #000;
+}

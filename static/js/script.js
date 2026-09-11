@@ -19,15 +19,113 @@ document
    START SEARCH
 -------------------------------- */
 
-async function startSearch() {
-    const input = document.getElementById("songInput");
-    const title = input.value.trim();
+let searchPending = false;
+let downloadPending = false;
+let activePreview = null;
 
+function closePreview() {
+    if (!activePreview) return;
+    activePreview.container.remove();
+    activePreview.button.textContent = "Preview";
+    activePreview.button.setAttribute("aria-expanded", "false");
+    activePreview = null;
+}
+
+function togglePreview(track, card, button) {
+    const isOpen = activePreview && activePreview.button === button;
+    closePreview();
+    if (isOpen) return;
+    const container = document.createElement("div");
+    container.className = "track-preview";
+    const player = document.createElement("iframe");
+    player.src = `https://www.youtube.com/embed/${encodeURIComponent(track.id)}?autoplay=1&playsinline=1`;
+    player.title = "Preview: " + track.title;
+    player.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+    player.allowFullscreen = true;
+    player.referrerPolicy = "strict-origin-when-cross-origin";
+    container.append(player);
+    const note = document.createElement("p");
+    note.className = "results-message";
+    note.textContent = "If this video cannot be played here, try another version.";
+    container.append(note);
+    card.append(container);
+    button.textContent = "Close preview";
+    button.setAttribute("aria-expanded", "true");
+    activePreview = {container, button};
+}
+
+async function startSearch() {
+    if (searchPending || downloadPending) return;
+    const title = document.getElementById("songInput").value.trim();
     if (!title) {
         showError("Enter an artist or track name.");
         return;
     }
+    hideError();
+    searchPending = true;
+    const button = document.getElementById("searchBtn");
+    const results = document.getElementById("searchResults");
+    button.disabled = true;
+    button.textContent = "Searching…";
+    closePreview();
+    results.replaceChildren();
+    document.getElementById("resultsPanel").hidden = false;
+    document.getElementById("resultsMessage").textContent = "Finding tracks…";
+    try {
+        const response = await fetch("/search", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({song_title: title})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to search.");
+        document.getElementById("resultsMessage").textContent = data.results.length
+            ? "Compare versions, preview, then choose a track."
+            : "No tracks found. Try another artist or title.";
+        data.results.forEach(track => {
+            const card = document.createElement("div");
+            card.className = "result-card";
+            const name = document.createElement("div");
+            name.className = "result-title";
+            name.textContent = track.title;
+            const details = document.createElement("div");
+            details.className = "history-size";
+            const seconds = Math.floor(track.duration);
+            const duration = track.duration == null ? "Duration unavailable"
+                : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+            details.textContent = `${track.uploader} · ${duration}`;
+            const actions = document.createElement("div");
+            actions.className = "result-actions";
+            const preview = document.createElement("button");
+            preview.type = "button";
+            preview.className = "action-button";
+            preview.textContent = "Preview";
+            preview.setAttribute("aria-expanded", "false");
+            preview.addEventListener("click", () => togglePreview(track, card, preview));
+            const download = document.createElement("button");
+            download.className = "action-button";
+            download.textContent = "Download MP3";
+            download.addEventListener("click", () => startDownload(track));
+            actions.append(preview, download);
+            card.append(name, details, actions);
+            results.append(card);
+        });
+    } catch (error) {
+        document.getElementById("resultsMessage").textContent = "Search could not finish.";
+        showError(error.message);
+    } finally {
+        searchPending = false;
+        button.disabled = false;
+        button.textContent = "Search";
+    }
+}
 
+async function startDownload(track) {
+    if (downloadPending || searchPending) return;
+    closePreview();
+    downloadPending = true;
+    const title = track.title;
+    clearTimeout(pollingTimer);
+    document.getElementById("resultsPanel").hidden = true;
     hideError();
 
     document.getElementById("searchBtn").disabled = true;
@@ -41,13 +139,14 @@ async function startSearch() {
     resetSteps();
 
     try {
-        const response = await fetch("/search", {
+        const response = await fetch("/jobs", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                song_title: title
+                song_title: title,
+                video_id: track.id
             })
         });
 
@@ -64,6 +163,7 @@ async function startSearch() {
         pollStatus();
 
     } catch (error) {
+        downloadPending = false;
         showError(error.message);
 
         document.getElementById(
@@ -104,6 +204,7 @@ async function pollStatus() {
         }
 
         if (job.status === "error") {
+            downloadPending = false;
             showError(
                 job.error || "Download failed."
             );
@@ -116,6 +217,7 @@ async function pollStatus() {
         }
 
         if (job.status === "cancelled") {
+            downloadPending = false;
             document.getElementById(
                 "jobMessage"
             ).textContent = "Cancelled.";
@@ -133,6 +235,7 @@ async function pollStatus() {
         );
 
     } catch (error) {
+        downloadPending = false;
         showError(error.message);
 
         document.getElementById(
@@ -261,6 +364,7 @@ function updateSteps(stage) {
 -------------------------------- */
 
 function finishJob(job) {
+    downloadPending = false;
     setProgress(100);
 
     updateSteps("completed");
@@ -310,6 +414,7 @@ async function cancelJob() {
             }
         );
 
+        downloadPending = false;
         clearTimeout(
             pollingTimer
         );
@@ -339,6 +444,7 @@ async function cancelJob() {
 -------------------------------- */
 
 function resetSearch() {
+    if (downloadPending) return;
     clearTimeout(
         pollingTimer
     );
@@ -488,6 +594,7 @@ async function deleteDownload(filename, button) {
         }
         await loadHistory();
     } catch (error) {
+        downloadPending = false;
         showError(error.message);
     } finally {
         button.disabled = false;

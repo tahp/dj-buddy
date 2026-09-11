@@ -44,8 +44,8 @@
         </h1>
 
         <p>
-            Search a track and convert it
-            to a high-quality MP3.
+            Find the right version, preview it,
+            and download an MP3.
         </p>
     </div>
 
@@ -67,7 +67,7 @@
                 class="search-button"
                 onclick="startSearch()"
             >
-                Download
+                Search
             </button>
 
         </div>
@@ -80,6 +80,13 @@
         class="error-box"
     ></div>
 
+
+    <section id="resultsPanel" class="results-panel" hidden>
+        <h2 class="section-title">Choose your track</h2>
+        <p id="resultsMessage" class="results-message" role="status"></p>
+        <div id="searchResults"></div>
+        <p class="results-message">MP3 output: 320 kbps. Quality depends on the original source.</p>
+    </section>
 
     <div
         id="jobCard"
