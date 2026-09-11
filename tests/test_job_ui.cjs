@@ -15,10 +15,10 @@ test('failed job clears previously available save controls', () => {
         }
     };
     // Load the UI functions without page startup or network requests.
-    const source = readFileSync('static/js/script.js', 'utf8');
+    const source = readFileSync('static/js/script.js', 'utf8').replace(/\r\n/g, '\n');
     const context = vm.createContext({document, desktopMode: false});
     vm.runInContext(source.slice(source.indexOf('function updateJobUI('),
-                                source.indexOf('loadHistory();\nrestoreCurrentJob();')), context);
+                                source.lastIndexOf('\nloadHistory();')), context);
     document.getElementById('completeBox').style.display = 'block';
     document.getElementById('downloadLink').href = '/download/old.mp3';
     context.updateJobUI({title: 'Track', status: 'error', stage: 'error',
