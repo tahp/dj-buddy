@@ -4,11 +4,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 import app
+from auth_support import AccountTestMixin
 
 
-class SearchTests(unittest.TestCase):
-    def setUp(self):
-        self.client = app.app.test_client()
+class SearchTests(AccountTestMixin, unittest.TestCase):
 
     def test_search_returns_choices_without_starting_download(self):
         result = Mock(stdout=json.dumps({"entries": [

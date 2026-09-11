@@ -82,7 +82,7 @@ def init_auth(app, data_dir):
         
         public_endpoints = ('login', 'join', 'static', 'health')
         if request.endpoint not in public_endpoints and not g.user:
-            if request.is_json or request.path in ('/search', '/jobs') or request.path.startswith('/jobs/'):
+            if request.is_json or request.endpoint in ('search', 'start_download', 'current_job', 'history', 'job_status', 'cancel_job', 'delete_file'):
                 return jsonify(error='Please sign in again.'), 401
             return redirect(url_for('login'))
 

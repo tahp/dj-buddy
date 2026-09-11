@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+.env
+.env.*
+downloads
+temp
+__pycache__
+*.pyc
+.DS_Store
+
+.session-secret
+accounts.sqlite3*

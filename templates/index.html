@@ -58,7 +58,7 @@
     </div>
 
 
-    <p class="results-message">Private beta · Tracks up to 15 minutes · 500 MB per account · Downloads expire after 7 days</p>
+    <p class="results-message">Private beta · Tracks up to 15 minutes · Temporary files only · Save to your device within 1 hour</p>
 
     <div class="search-panel">
 
@@ -181,7 +181,7 @@
         >
 
             <div class="complete-title">
-                ✓ Download complete
+                ✓ MP3 ready to save
             </div>
 
             <div
@@ -193,9 +193,11 @@
                 id="downloadLink"
                 class="download-button"
             >
-                Download MP3
+                Save to device
             </a>
 
+            <p class="results-message">Your MP3 is not saved to this device yet. Use the button above and check your browser’s downloads.</p>
+            <p id="saveExpiry" class="results-message"></p>
         </div>
 
 
@@ -238,8 +240,10 @@
     <div class="history">
 
         <div class="section-title">
-            Recent Downloads
+            Ready to save
         </div>
+
+        <p class="results-message">Server copies are removed after 1 hour and may disappear sooner if this beta server restarts. Files you save to your device remain yours to play offline.</p>
 
         <div
             id="historyList"
@@ -250,7 +254,7 @@
 
                 <div class="history-info">
                     <div class="history-size">
-                        No downloads yet
+                        No temporary files ready yet
                     </div>
                 </div>
 

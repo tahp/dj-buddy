@@ -52,7 +52,7 @@ worker_started = False
 app.config.update(
     MAX_USER_JOBS=3, MAX_QUEUE_JOBS=20, MAX_TRACK_SECONDS=900,
     MAX_STORED_BYTES=500 * 1024 * 1024, MAX_TEMP_BYTES=200 * 1024 * 1024,
-    JOB_TIMEOUT_SECONDS=600, FILE_RETENTION_SECONDS=7 * 86400,
+    JOB_TIMEOUT_SECONDS=600, FILE_RETENTION_SECONDS=3600, JOB_RETENTION_SECONDS=7 * 86400,
 )
 
 
@@ -92,6 +92,24 @@ def stored_bytes(owner_id):
                if path.is_file() and not path.is_symlink())
 
 
+def file_expiry(path):
+    if os.path.islink(path):
+        return None
+    try:
+        return os.path.getmtime(path) + app.config["FILE_RETENTION_SECONDS"]
+    except FileNotFoundError:
+        return None
+
+
+def file_ready(path):
+    with jobs_lock:
+        if any(job["final_path"] == path and job["status"] in ("queued", "running")
+               for job in jobs.values()):
+            return False
+    expires_at = file_expiry(path)
+    return expires_at is not None and expires_at > time.time() and os.path.isfile(path)
+
+
 def expire_files():
     cutoff = time.time() - app.config["FILE_RETENTION_SECONDS"]
     with jobs_lock:
@@ -102,7 +120,7 @@ def expire_files():
                 if path.stat().st_mtime < cutoff:
                     path.unlink(missing_ok=True)
         expired = [job_id for job_id, job in jobs.items()
-                   if job["created_at"] < cutoff and job["status"] not in ("queued", "running")]
+                   if job["created_at"] < time.time() - app.config["JOB_RETENTION_SECONDS"] and job["status"] not in ("queued", "running")]
         for job_id in expired:
             with database() as db:
                 db.execute("DELETE FROM download_jobs WHERE id=?", (job_id,))
@@ -306,7 +324,7 @@ def download_worker(job):
             with jobs_lock:
                 if job["cancelled"]:
                     raise RuntimeError("Download cancelled.")
-                update_job(job, status="completed", stage="completed", progress=100, message="Download complete.")
+                update_job(job, status="completed", stage="completed", progress=100, message="MP3 ready. Save it to your device before leaving.")
         except Exception as error:
             add_log(job, str(error))
             job["error"] = None if job["cancelled"] else str(error)
@@ -405,7 +423,8 @@ def job_status(job_id):
         "filename": job["filename"],
         "error": job["error"],
         "log": job["log"][-30:],
-        "file_available": job["status"] == "completed" and os.path.isfile(job["final_path"])
+        "file_available": job["status"] == "completed" and file_ready(job["final_path"]),
+        "expires_at": file_expiry(job["final_path"]) if job["status"] == "completed" else None
     })
 
 
@@ -435,8 +454,9 @@ def cancel_job(job_id):
 
 @app.route("/download/<filename>")
 def download_file(filename):
-    if os.path.islink(os.path.join(user_downloads(), filename)):
-        abort(404)
+    path = os.path.join(user_downloads(), filename)
+    if not file_ready(path):
+        abort(404, description="This temporary copy is unavailable or expired. Prepare the track again if you have not saved it to your device.")
     return send_from_directory(
         user_downloads(),
         filename,
@@ -484,13 +504,14 @@ def history():
             continue
 
         path = os.path.join(user_downloads(), filename)
-        if os.path.islink(path) or not os.path.isfile(path):
+        if not file_ready(path):
             continue
 
         files.append({
             "filename": filename,
             "size": os.path.getsize(path),
-            "modified": os.path.getmtime(path)
+            "modified": os.path.getmtime(path),
+            "expires_at": file_expiry(path)
         })
 
     files.sort(key=lambda x: x["modified"], reverse=True)

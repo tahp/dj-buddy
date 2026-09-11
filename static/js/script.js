@@ -115,7 +115,7 @@ async function startSearch() {
             preview.addEventListener("click", () => togglePreview(track, card, preview));
             const download = document.createElement("button");
             download.className = "action-button";
-            download.textContent = "Download MP3";
+            download.textContent = "Prepare MP3";
             download.addEventListener("click", () => startDownload(track));
             actions.append(preview, download);
             card.append(name, details, actions);
@@ -378,6 +378,7 @@ function updateSteps(stage) {
 -------------------------------- */
 
 function finishJob(job) {
+    document.getElementById("saveExpiry").textContent = expiryLabel(job.expires_at);
     downloadPending = false;
     setProgress(100);
 
@@ -410,7 +411,7 @@ function finishJob(job) {
     if (!job.file_available) {
         document.getElementById("completeBox").style.display = "none";
         document.getElementById("downloadLink").removeAttribute("href");
-        document.getElementById("jobMessage").textContent = "This download was deleted or expired.";
+        document.getElementById("jobMessage").textContent = "The temporary server copy is unavailable. Files already saved to your device are unaffected.";
     }
     loadHistory();
 }
@@ -511,7 +512,7 @@ async function loadHistory() {
                 <div class="history-item">
                     <div class="history-info">
                         <div class="history-size">
-                            No downloads yet
+                            No temporary files ready yet
                         </div>
                     </div>
                 </div>
@@ -533,7 +534,7 @@ async function loadHistory() {
                         </div>
 
                         <div class="history-size">
-                            ${formatBytes(file.size)}
+                            ${formatBytes(file.size)} · ${escapeHtml(expiryLabel(file.expires_at))}
                         </div>
                     </div>
 
@@ -543,7 +544,7 @@ async function loadHistory() {
                             file.filename
                         )}"
                     >
-                        Download
+                        Save to device
                     </a>
                     <button type="button" class="history-delete">
                         Delete
@@ -566,7 +567,7 @@ async function loadHistory() {
 
 
 async function deleteDownload(filename, button) {
-    if (!window.confirm(`Delete "${filename}" from downloads? This cannot be undone.`)) {
+    if (!window.confirm(`Delete the temporary server copy of "${filename}"? Any copy already saved to your device is unaffected.`)) {
         return;
     }
 
@@ -586,7 +587,7 @@ async function deleteDownload(filename, button) {
         if (document.getElementById("filename").textContent === filename) {
             document.getElementById("completeBox").style.display = "none";
             document.getElementById("downloadLink").removeAttribute("href");
-            document.getElementById("jobMessage").textContent = "Downloaded file deleted.";
+            document.getElementById("jobMessage").textContent = "Temporary server copy deleted.";
         }
         await loadHistory();
     } catch (error) {
@@ -603,6 +604,11 @@ async function deleteDownload(filename, button) {
    HELPERS
 -------------------------------- */
 
+function expiryLabel(timestamp) {
+    if (!timestamp) return "Temporary server copy";
+    return "Server copy expires " + new Date(timestamp * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+}
+
 function formatStage(stage) {
     const names = {
         queued: "Queued",
@@ -610,7 +616,7 @@ function formatStage(stage) {
         downloading: "Downloading",
         converting: "Converting",
         finishing: "Finishing",
-        completed: "Complete",
+        completed: "Ready to save",
         cancelled: "Cancelled",
         error: "Error"
     };

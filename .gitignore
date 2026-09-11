@@ -11,3 +11,6 @@ temp/*
 !temp/.gitkeep
 
 .DS_Store
+
+.session-secret
+accounts.sqlite3*
