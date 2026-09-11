@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+downloads/*
+!downloads/.gitkeep
+
+temp/*
+!temp/.gitkeep
+
+.DS_Store
