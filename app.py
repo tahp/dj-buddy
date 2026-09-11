@@ -25,14 +25,14 @@ from pathlib import Path
 
 app = Flask(__name__)
 
-DATA_DIR = os.path.abspath(os.environ.get("DATA_DIR", os.path.dirname(__file__)))
+# Fallback to /tmp/data if DATA_DIR environment variable is not set
+DATA_DIR = os.environ.get("DATA_DIR", "/tmp/data")
 DOWNLOADS_DIR = os.path.join(DATA_DIR, "downloads")
 TEMP_DIR = os.path.join(DATA_DIR, "temp")
 
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 os.makedirs(TEMP_DIR, exist_ok=True)
 init_auth(app, DATA_DIR)
-
 
 def user_downloads():
     path = os.path.join(DOWNLOADS_DIR, g.user["id"])
