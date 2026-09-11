@@ -16,7 +16,7 @@ test('failed job clears previously available save controls', () => {
     };
     // Load the UI functions without page startup or network requests.
     const source = readFileSync('static/js/script.js', 'utf8');
-    const context = vm.createContext({document});
+    const context = vm.createContext({document, desktopMode: false});
     vm.runInContext(source.slice(source.indexOf('function updateJobUI('),
                                 source.indexOf('loadHistory();\nrestoreCurrentJob();')), context);
     document.getElementById('completeBox').style.display = 'block';

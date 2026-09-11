@@ -9,8 +9,6 @@ from datetime import timedelta
 from contextlib import contextmanager
 from pathlib import Path
 
-import psycopg
-from psycopg.rows import dict_row
 
 import click
 from flask import g, session, request, redirect, url_for, jsonify, render_template, current_app
@@ -38,6 +36,8 @@ class Database:
 def database():
     url = current_app.config.get('DATABASE_URL')
     if url:
+        import psycopg
+        from psycopg.rows import dict_row
         connection = psycopg.connect(url, row_factory=dict_row, connect_timeout=10, prepare_threshold=None)
     else:
         connection = sqlite3.connect(current_app.config['AUTH_DATABASE'], timeout=15)
@@ -45,6 +45,10 @@ def database():
     try:
         with connection:
             yield Database(connection, postgres=bool(url))
+    except Exception as error:
+        if url and isinstance(error, psycopg.IntegrityError):
+            raise sqlite3.IntegrityError(str(error)) from error
+        raise
     finally:
         connection.close()
 
@@ -223,7 +227,7 @@ def init_auth(app, data_dir):
                                 bootstrap = db.execute("SELECT value FROM app_settings WHERE name='owner_invite'").fetchone()
                                 if bootstrap and secrets.compare_digest(bootstrap['value'], digest):
                                     db.execute('INSERT INTO administrators(user_id) VALUES(?)', (user_id,))
-                    except (sqlite3.IntegrityError, psycopg.IntegrityError):
+                    except sqlite3.IntegrityError:
                         error = 'That username is already taken.'
                     if not error:
                         session.clear()

@@ -17,3 +17,7 @@ accounts.sqlite3*
 
 # Local authentication exports must never be shipped.
 cookies*.txt
+
+build/
+dist/
+*.spec

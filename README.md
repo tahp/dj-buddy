@@ -1,3 +1,9 @@
+# DJ Buddy
+
+**Desktop app (macOS and Windows):** see [DESKTOP.md](DESKTOP.md) for running, building, and downloading directly into a local music folder.
+
+The documentation below describes the existing hosted version.
+
 # RequestAssistant
 
 RequestAssistant is a lightweight Flask-based track downloader with a modern, DJ-focused web interface.

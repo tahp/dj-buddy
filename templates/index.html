@@ -10,7 +10,7 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>RequestAssistant</title>
+    <title>{{ 'DJ Buddy' if config.DESKTOP else 'RequestAssistant' }}</title>
 
     <link
         rel="stylesheet"
@@ -18,9 +18,10 @@
     >
 </head>
 
-<body>
+<body data-desktop="{{ 'true' if config.DESKTOP else 'false' }}">
 
 <div class="page">
+    {% if not config.DESKTOP %}
     <div class="account-bar">
         <span>Signed in as {{ g.user['username'] }}</span>
         {% if g.is_admin %}<a class="history-download" href="{{ url_for('admin_invites') }}">Invite testers</a>{% endif %}
@@ -30,6 +31,8 @@
         </form>
     </div>
 
+    {% endif %}
+
     <div class="logo">
         <div class="logo-icon">
             ♫
@@ -37,7 +40,7 @@
 
         <div>
             <div class="logo-text">
-                RequestAssistant
+                {{ 'DJ Buddy' if config.DESKTOP else 'RequestAssistant' }}
             </div>
 
             <div class="logo-subtitle">
@@ -47,6 +50,12 @@
     </div>
 
 
+    {% if config.DESKTOP %}
+    <div class="folder-panel">
+        <div><div class="section-title">Save music to</div><div id="outputFolder" class="filename">Loading folder…</div></div>
+        <button id="chooseFolder" class="action-button" onclick="chooseOutputFolder()">Choose folder</button>
+    </div>
+    {% endif %}
     <div class="hero">
         <h1>
             Grab your next track.
@@ -59,7 +68,7 @@
     </div>
 
 
-    <p class="results-message">Private beta · Tracks up to 15 minutes · Temporary files only · Save to your device within 1 hour</p>
+    <p class="results-message">{{ 'Downloads run on this computer · Your music stays in your folder' if config.DESKTOP else 'Private beta · Tracks up to 15 minutes · Temporary files only · Save to your device within 1 hour' }}</p>
 
     <div class="search-panel">
 
@@ -182,7 +191,7 @@
         >
 
             <div class="complete-title">
-                ✓ MP3 ready to save
+                ✓ {{ 'MP3 saved' if config.DESKTOP else 'MP3 ready to save' }}
             </div>
 
             <div
@@ -194,10 +203,10 @@
                 id="downloadLink"
                 class="download-button"
             >
-                Save to device
+                {{ 'Open folder' if config.DESKTOP else 'Save to device' }}
             </a>
 
-            <p class="results-message">Your MP3 is not saved to this device yet. Use the button above and check your browser’s downloads.</p>
+            <p class="results-message">{{ 'Saved on this computer. Open the folder to use it in your DJ software.' if config.DESKTOP else 'Your MP3 is not saved to this device yet. Use the button above and check your browser’s downloads.' }}</p>
             <p id="saveExpiry" class="results-message"></p>
         </div>
 
@@ -244,7 +253,7 @@
             Recent downloads
         </div>
 
-        <p class="results-message">Server copies are removed after 1 hour and may disappear sooner if this beta server restarts. Files you save to your device remain yours to play offline.</p>
+        <p class="results-message">{{ 'Tracks are saved on this computer. They stay in your music folder until you remove them yourself.' if config.DESKTOP else 'Server copies are removed after 1 hour and may disappear sooner if this beta server restarts. Files you save to your device remain yours to play offline.' }}</p>
 
         <div
             id="historyList"
@@ -255,7 +264,7 @@
 
                 <div class="history-info">
                     <div class="history-size">
-                        No temporary files ready yet
+                        {{ 'Your downloaded tracks will appear here' if config.DESKTOP else 'No temporary files ready yet' }}
                     </div>
                 </div>
 

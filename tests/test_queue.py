@@ -64,8 +64,8 @@ class QueueTests(AccountTestMixin, unittest.TestCase):
         job = self.enqueue()
         job['deadline'] = time.monotonic() - 1
         with app.app.app_context():
-            with self.assertRaisesRegex(RuntimeError, 'processing limit'):
-                app.run_process(job, ['python3', '-c', 'import time; time.sleep(60)'])
+            with self.assertRaisesRegex(RuntimeError, 'processing time limit'):
+                app.run_process(job, [sys.executable, '-c', 'import time; time.sleep(60)'])
         self.assertIsNone(job['process'])
 
     def test_failed_worker_cleans_up(self):

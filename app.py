@@ -22,18 +22,25 @@ import signal
 import queue
 import shutil
 from pathlib import Path
+from runtime_tools import youtube_command, tool_path, process_options
 
 
 app = Flask(__name__)
 
 # Fallback to /tmp/data if DATA_DIR environment variable is not set
+DESKTOP = os.environ.get("DJ_BUDDY_DESKTOP") == "1"
 DATA_DIR = os.environ.get("DATA_DIR", "/tmp/data")
+app.config["DESKTOP"] = DESKTOP
 DOWNLOADS_DIR = os.path.join(DATA_DIR, "downloads")
 TEMP_DIR = os.path.join(DATA_DIR, "temp")
 
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 os.makedirs(TEMP_DIR, exist_ok=True)
-init_auth(app, DATA_DIR)
+if DESKTOP:
+    from desktop_support import init_desktop, output_directory, publish_download
+    init_desktop(app, DATA_DIR)
+else:
+    init_auth(app, DATA_DIR)
 
 def user_downloads():
     path = os.path.join(DOWNLOADS_DIR, g.user["id"])
@@ -50,11 +57,18 @@ jobs = {}
 jobs_lock = threading.RLock()
 queue_wakeup = threading.Event()
 worker_started = False
+worker_thread = None
+worker_shutdown = threading.Event()
 app.config.update(
     MAX_USER_JOBS=3, MAX_QUEUE_JOBS=20, MAX_TRACK_SECONDS=900,
     MAX_STORED_BYTES=500 * 1024 * 1024, MAX_TEMP_BYTES=200 * 1024 * 1024,
     JOB_TIMEOUT_SECONDS=600, FILE_RETENTION_SECONDS=3600, JOB_RETENTION_SECONDS=7 * 86400,
 )
+
+if DESKTOP:
+    app.config.update(MAX_USER_JOBS=100, MAX_QUEUE_JOBS=100,
+                      MAX_STORED_BYTES=float('inf'), MAX_TRACK_SECONDS=float('inf'),
+                      MAX_TEMP_BYTES=float('inf'), JOB_TIMEOUT_SECONDS=7200)
 
 
 def save_job(job):
@@ -74,8 +88,8 @@ def recover_jobs():
             job["process"] = None
             if job["status"] == "running":
                 job.update(status="error", stage="error", progress=0,
-                           error="Server restarted during this download. Please try again.",
-                           message="Server restarted during this download. Please try again.")
+                           error="App restarted during this download. Please try again.",
+                           message="App restarted during this download. Please try again.")
                 cleanup_job(job)
                 save_job(job)
             jobs[job["id"]] = job
@@ -83,7 +97,7 @@ def recover_jobs():
 
 def cleanup_job(job):
     shutil.rmtree(os.path.join(TEMP_DIR, job["id"]), ignore_errors=True)
-    if job["status"] != "completed":
+    if app.config["DESKTOP"] or job["status"] != "completed":
         Path(job["final_path"]).unlink(missing_ok=True)
 
 
@@ -112,6 +126,8 @@ def file_ready(path):
 
 
 def expire_files():
+    if app.config["DESKTOP"]:
+        return  # Local music and its history do not expire.
     cutoff = time.time() - app.config["FILE_RETENTION_SECONDS"]
     with jobs_lock:
         protected = {job["final_path"] for job in jobs.values()
@@ -130,7 +146,7 @@ def expire_files():
 
 def queue_worker():
     with app.app_context():
-        while True:
+        while not worker_shutdown.is_set():
             try:
                 expire_files()
                 with jobs_lock:
@@ -150,13 +166,14 @@ def queue_worker():
 
 @app.before_request
 def ensure_worker():
-    global worker_started
+    global worker_started, worker_thread
     if app.testing:
         return
     with jobs_lock:
         if not worker_started:
             recover_jobs()
-            threading.Thread(target=queue_worker, daemon=True).start()
+            worker_thread = threading.Thread(target=queue_worker, daemon=True)
+            worker_thread.start()
             worker_started = True
 
 
@@ -171,7 +188,7 @@ def create_job(song_title, video_id):
     owner_id = g.user["id"]
     downloads_dir = user_downloads()
 
-    clean_title = sanitize_filename(song_title)[:100] or "Track"
+    clean_title = sanitize_filename(song_title)[:100].rstrip(". ") or "Track"
     filename = f"{clean_title}_{job_id[:8]}.mp3"
     final_path = os.path.join(downloads_dir, filename)
     temp_template = os.path.join(TEMP_DIR, job_id, "audio.%(ext)s")
@@ -195,6 +212,9 @@ def create_job(song_title, video_id):
         "error": None,
         "created_at": time.time()
     }
+
+    if app.config["DESKTOP"]:
+        job["output_directory"] = str(output_directory())
 
     with jobs_lock:
         save_job(job)
@@ -237,13 +257,18 @@ def update_job(
 def stop_process(process):
     if process and process.poll() is None:
         try:
-            os.killpg(process.pid, signal.SIGKILL)
+            if os.name == 'nt':
+                subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
+                               capture_output=True, **process_options())
+            else:
+                os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
 
 
 YOUTUBE_BLOCK_MESSAGE = (
-    "YouTube is blocking downloads from this server. No MP3 was created. "
+    ("YouTube is blocking downloads from this computer. No MP3 was created. " if DESKTOP else
+     "YouTube is blocking downloads from this server. No MP3 was created. ") +
     "Previews may still play because they stream directly from YouTube. "
     "Please try again later."
 )
@@ -259,7 +284,7 @@ def run_process(job, command):
     if job["cancelled"]:
         raise RuntimeError("Download cancelled.")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               text=True, bufsize=1, start_new_session=True)
+                               text=True, encoding="utf-8", errors="replace", bufsize=1, **process_options())
     with jobs_lock:
         job["process"] = process
     output = queue.Queue(maxsize=100)
@@ -278,7 +303,7 @@ def run_process(job, command):
             if job["cancelled"]:
                 raise RuntimeError("Download cancelled.")
             if time.monotonic() > job["deadline"]:
-                raise RuntimeError("Download exceeded the 10-minute processing limit.")
+                raise RuntimeError("Download exceeded the processing time limit.")
             temp_size = sum(path.stat().st_size for path in (Path(TEMP_DIR) / job["id"]).glob("*")
                             if path.is_file())
             if temp_size > app.config["MAX_TEMP_BYTES"]:
@@ -286,7 +311,7 @@ def run_process(job, command):
             try:
                 line = output.get(timeout=0.2)
                 add_log(job, line)
-                if "yt_dlp" in command and youtube_blocked(line):
+                if any("yt_dlp" in arg or "dj-downloader" in arg for arg in command) and youtube_blocked(line):
                     raise RuntimeError(YOUTUBE_BLOCK_MESSAGE)
             except queue.Empty:
                 pass
@@ -294,7 +319,7 @@ def run_process(job, command):
                 break
         if process.returncode:
             details = "\n".join(job["log"][-30:]).lower()
-            if "yt_dlp" in command and youtube_blocked(details):
+            if any("yt_dlp" in arg or "dj-downloader" in arg for arg in command) and youtube_blocked(details):
                 raise RuntimeError(YOUTUBE_BLOCK_MESSAGE)
             raise RuntimeError("Track processing failed. See the technical log for details.")
     finally:
@@ -320,7 +345,7 @@ def download_worker(job):
             temp_dir.mkdir(parents=True, exist_ok=True)
             Path(job["final_path"]).parent.mkdir(parents=True, exist_ok=True)
             update_job(job, status="running", stage="searching", progress=10, message="Checking track…")
-            run_process(job, [sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "--ignore-config", "--no-playlist", "--skip-download",
+            run_process(job, youtube_command() + [ "--no-playlist", "--skip-download",
                               "--write-info-json", "--socket-timeout", "15", "--retries", "2",
                               "-o", str(temp_dir / "audio.%(ext)s"), job["source_url"]])
             metadata = json.loads((temp_dir / "audio.info.json").read_text())
@@ -328,24 +353,30 @@ def download_worker(job):
             if (metadata.get("is_live") or metadata.get("live_status") == "is_upcoming"
                     or not isinstance(duration, (int, float)) or duration <= 0
                     or duration > app.config["MAX_TRACK_SECONDS"]):
-                raise RuntimeError("Beta downloads require a known duration of 15 minutes or less; live streams are not supported.")
+                raise RuntimeError(("Choose a track with a known duration; live streams are not supported." if DESKTOP else "Beta downloads require a known duration of 15 minutes or less; live streams are not supported."))
             if stored_bytes(job["owner_id"]) + duration * 40000 + 1024 * 1024 > app.config["MAX_STORED_BYTES"]:
                 raise RuntimeError("This track would exceed your 500 MB storage limit. Delete some downloads first.")
             update_job(job, stage="downloading", progress=25, message="Downloading selected track…")
-            run_process(job, [sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "--ignore-config", "--no-playlist", "--socket-timeout", "15",
-                              "--retries", "2", "--max-filesize", str(app.config["MAX_TEMP_BYTES"]),
-                              "-f", "bestaudio/best", "-o", job["temp_template"], job["source_url"]])
+            run_process(job, youtube_command() + [ "--no-playlist", "--socket-timeout", "15",
+                              "--retries", "2",
+                              "-f", "bestaudio/best", "-o", job["temp_template"], job["source_url"]]
+                              + ([] if DESKTOP else ["--max-filesize", str(app.config["MAX_TEMP_BYTES"])]))
             files = [path for path in temp_dir.glob("audio.*")
                      if path.is_file() and path.suffix not in (".json", ".part", ".ytdl")]
             if len(files) != 1:
-                raise RuntimeError("Audio could not be downloaded within the beta limits.")
+                raise RuntimeError("Audio could not be downloaded.")
             update_job(job, stage="converting", progress=75, message="Converting to MP3…")
-            run_process(job, ["ffmpeg", "-y", "-i", str(files[0]), "-vn", "-t", str(app.config["MAX_TRACK_SECONDS"]),
-                              "-codec:a", "libmp3lame", "-b:a", "320k", job["final_path"]])
+            run_process(job, [tool_path("ffmpeg"), "-y", "-i", str(files[0]), "-vn",
+                              "-codec:a", "libmp3lame", "-b:a", "320k"]
+                              + ([] if DESKTOP else ["-t", str(app.config["MAX_TRACK_SECONDS"])])
+                              + [job["final_path"]])
             with jobs_lock:
                 if job["cancelled"]:
                     raise RuntimeError("Download cancelled.")
-                update_job(job, status="completed", stage="completed", progress=100, message="MP3 ready. Save it to your device before leaving.")
+                if DESKTOP:
+                    publish_download(job)
+                update_job(job, status="completed", stage="completed", progress=100,
+                           message="Saved to your music folder." if DESKTOP else "MP3 ready. Save it to your device before leaving.")
         except Exception as error:
             add_log(job, str(error))
             job["error"] = None if job["cancelled"] else str(error)
@@ -368,9 +399,9 @@ def search():
         return jsonify({"error": "Enter an artist or track name (up to 300 characters)."}), 400
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "--ignore-config", "--flat-playlist", "--dump-single-json",
+            youtube_command() + [ "--flat-playlist", "--dump-single-json",
              "--no-warnings", "--socket-timeout", "15", f"ytsearch5:{title.strip()}"],
-            capture_output=True, text=True, timeout=40, check=True
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=40, check=True, **process_options()
         )
         entries = json.loads(result.stdout).get("entries", [])
         tracks = []
@@ -404,9 +435,9 @@ def start_download():
     with jobs_lock:
         active = [job for job in jobs.values() if job["status"] in ("queued", "running")]
         if sum(job["owner_id"] == g.user["id"] for job in active) >= app.config["MAX_USER_JOBS"]:
-            return jsonify(error="You already have 3 queued or active downloads."), 429
+            return jsonify(error="Your download queue is full. Wait for a track to finish."), 429
         if len(active) >= app.config["MAX_QUEUE_JOBS"]:
-            return jsonify(error="The beta queue is full. Please try again shortly."), 429
+            return jsonify(error="The download queue is full. Please try again shortly."), 429
         if stored_bytes(g.user["id"]) >= app.config["MAX_STORED_BYTES"]:
             return jsonify(error="Your 500 MB storage is full. Delete some downloads first."), 429
         job = create_job(song_title.strip(), video_id)
@@ -444,8 +475,9 @@ def job_status(job_id):
         "filename": job["filename"],
         "error": job["error"],
         "log": job["log"][-30:],
-        "file_available": job["status"] == "completed" and file_ready(job["final_path"]),
-        "expires_at": file_expiry(job["final_path"]) if job["status"] == "completed" else None
+        "file_available": job["status"] == "completed" and (Path(job.get("saved_path", "")).is_file() if DESKTOP else file_ready(job["final_path"])),
+        "saved_path": job.get("saved_path") if DESKTOP else None,
+        "expires_at": file_expiry(job["final_path"]) if job["status"] == "completed" and not DESKTOP else None
     })
 
 
@@ -475,6 +507,8 @@ def cancel_job(job_id):
 
 @app.route("/download/<filename>")
 def download_file(filename):
+    if DESKTOP:
+        abort(404)
     path = os.path.join(user_downloads(), filename)
     if not file_ready(path):
         abort(404, description="This temporary copy is unavailable or expired. Prepare the track again if you have not saved it to your device.")
@@ -487,6 +521,8 @@ def download_file(filename):
 
 @app.route("/delete/<filename>", methods=["DELETE"])
 def delete_file(filename):
+    if DESKTOP:
+        abort(404)
     if (
         filename != os.path.basename(filename)
         or "\\" in filename
@@ -519,6 +555,15 @@ def delete_file(filename):
 
 @app.route("/history")
 def history():
+    if DESKTOP:
+        with jobs_lock:
+            result = []
+            for job in sorted(jobs.values(), key=lambda item: item['created_at'], reverse=True):
+                path = Path(job.get('saved_path', ''))
+                if job['status'] == 'completed' and path.is_file():
+                    result.append(dict(job_id=job['id'], filename=job['filename'],
+                                       size=path.stat().st_size, saved_path=str(path), expires_at=None))
+            return jsonify(result[:50])
     files = []
     for filename in os.listdir(user_downloads()):
         if not filename.lower().endswith(".mp3"):

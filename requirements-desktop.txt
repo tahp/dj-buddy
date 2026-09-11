@@ -1,0 +1,4 @@
+Flask>=3.1,<4
+yt-dlp[default]
+pywebview>=6,<7
+filelock>=3.20,<4

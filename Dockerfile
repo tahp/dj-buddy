@@ -12,7 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && node --version \
     && python -c "import yt_dlp, yt_dlp_ejs"
-COPY app.py auth.py .
+COPY app.py auth.py runtime_tools.py .
 COPY templates ./templates
 COPY static ./static
 

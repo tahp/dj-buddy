@@ -1,0 +1,61 @@
+name: Desktop builds
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '**.py'
+      - 'templates/**'
+      - 'static/**'
+      - 'requirements*.txt'
+      - '.github/workflows/desktop.yml'
+  pull_request:
+    paths:
+      - '**.py'
+      - 'templates/**'
+      - 'static/**'
+      - 'requirements*.txt'
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macOS-Apple-Silicon
+          - os: macos-15-intel
+            label: macOS-Intel
+          - os: windows-latest
+            label: Windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r requirements-build.txt
+      - run: python -m unittest discover -s tests
+      - run: node --test tests/test_job_ui.cjs
+      - run: python scripts/build_desktop.py
+      - name: Test packaged startup
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            "dist/DJ Buddy.app/Contents/MacOS/DJ Buddy" --smoke-test
+          else
+            python -c "import subprocess; subprocess.run(['dist/DJ Buddy/DJ Buddy.exe', '--smoke-test'], check=True, timeout=90)"
+          fi
+      - name: Archive macOS app
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent 'dist/DJ Buddy.app' 'dist/DJ-Buddy-${{ matrix.label }}.zip'
+      - name: Archive Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path 'dist/DJ Buddy' -DestinationPath 'dist/DJ-Buddy-${{ matrix.label }}.zip'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DJ-Buddy-${{ matrix.label }}
+          path: dist/DJ-Buddy-*.zip

@@ -1,3 +1,5 @@
+const desktopMode = document.body.dataset.desktop === "true";
+
 async function apiFetch(url, options = {}) {
     const headers = new Headers(options.headers || {});
     headers.set("X-CSRF-Token", document.querySelector('meta[name="csrf-token"]').content);
@@ -115,7 +117,7 @@ async function startSearch() {
             preview.addEventListener("click", () => togglePreview(track, card, preview));
             const download = document.createElement("button");
             download.className = "action-button";
-            download.textContent = "Prepare MP3";
+            download.textContent = desktopMode ? "Download MP3" : "Prepare MP3";
             download.addEventListener("click", () => startDownload(track));
             actions.append(preview, download);
             card.append(name, details, actions);
@@ -385,6 +387,20 @@ function updateSteps(stage) {
 -------------------------------- */
 
 function finishJob(job) {
+    if (desktopMode) {
+        downloadPending = false;
+        document.getElementById("searchBtn").disabled = false;
+        document.getElementById("cancelBtn").style.display = "none";
+        document.getElementById("completeBox").style.display = job.file_available ? "block" : "none";
+        document.getElementById("filename").textContent = job.filename;
+        document.getElementById("saveExpiry").textContent = job.saved_path || "";
+        const link = document.getElementById("downloadLink");
+        link.href = "#";
+        link.onclick = event => { event.preventDefault(); openOutputFolder(job.id); };
+        if (!job.file_available) document.getElementById("jobMessage").textContent = "This file was moved or removed from its saved location.";
+        loadHistory();
+        return;
+    }
     document.getElementById("saveExpiry").textContent = expiryLabel(job.expires_at);
     downloadPending = false;
     setProgress(100);
@@ -519,7 +535,7 @@ async function loadHistory() {
                 <div class="history-item">
                     <div class="history-info">
                         <div class="history-size">
-                            No temporary files ready yet
+                            ${desktopMode ? "Your downloaded tracks will appear here" : "No temporary files ready yet"}
                         </div>
                     </div>
                 </div>
@@ -541,25 +557,24 @@ async function loadHistory() {
                         </div>
 
                         <div class="history-size">
-                            ${formatBytes(file.size)} · ${escapeHtml(expiryLabel(file.expires_at))}
+                            ${formatBytes(file.size)} · ${escapeHtml(desktopMode ? file.saved_path : expiryLabel(file.expires_at))}
                         </div>
                     </div>
 
                     <a
                         class="history-download"
-                        href="/download/${encodeURIComponent(
-                            file.filename
-                        )}"
+                        href="${desktopMode ? "#" : "/download/" + encodeURIComponent(file.filename)}"
                     >
-                        Save to device
+                        ${desktopMode ? "Open folder" : "Save to device"}
                     </a>
-                    <button type="button" class="history-delete">
-                        Delete
-                    </button>
+                    ${desktopMode ? "" : '<button type="button" class="history-delete">Delete</button>'}
                 </div>
             `;
         }).join("");
 
+        if (desktopMode) list.querySelectorAll(".history-download").forEach((link, index) => {
+            link.addEventListener("click", event => { event.preventDefault(); openOutputFolder(files[index].job_id); });
+        });
         list.querySelectorAll(".history-delete").forEach((button, index) => {
             const filename = files[index].filename;
             button.setAttribute("aria-label", "Delete " + filename);
@@ -623,7 +638,7 @@ function formatStage(stage) {
         downloading: "Downloading",
         converting: "Converting",
         finishing: "Finishing",
-        completed: "Ready to save",
+        completed: desktopMode ? "Saved" : "Ready to save",
         cancelled: "Cancelled",
         error: "Error"
     };
@@ -697,8 +712,38 @@ async function restoreCurrentJob() {
     }
 }
 
+async function openOutputFolder(jobId) {
+    try {
+        const response = await apiFetch("/desktop/open-folder", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({job_id: jobId})});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not open the folder.");
+    } catch (error) { showError(error.message); }
+}
+
+async function chooseOutputFolder() {
+    const button = document.getElementById("chooseFolder");
+    button.disabled = true;
+    try {
+        const response = await apiFetch("/desktop/folder", {method: "POST"});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not choose a folder.");
+        document.getElementById("outputFolder").textContent = data.output_directory;
+    } catch (error) { showError(error.message); }
+    finally { button.disabled = false; }
+}
+
+async function loadOutputFolder() {
+    try {
+        const response = await apiFetch("/desktop/settings");
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load the music folder.");
+        document.getElementById("outputFolder").textContent = data.output_directory;
+    } catch (error) { showError(error.message); }
+}
+
 loadHistory();
 restoreCurrentJob();
+if (desktopMode) loadOutputFolder();
 
 document.getElementById(
     "songInput"
