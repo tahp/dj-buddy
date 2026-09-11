@@ -149,6 +149,9 @@ async function startDownload(track) {
 
     setProgress(0);
     resetSteps();
+    document.getElementById("stageText").textContent = "Queued";
+    document.getElementById("jobMessage").textContent = "Starting preparation…";
+    document.getElementById("downloadLink").removeAttribute("href");
 
     try {
         const response = await apiFetch("/jobs", {
@@ -262,6 +265,10 @@ async function pollStatus() {
 -------------------------------- */
 
 function updateJobUI(job) {
+    if (job.status !== "completed" || !job.file_available) {
+        document.getElementById("completeBox").style.display = "none";
+        document.getElementById("downloadLink").removeAttribute("href");
+    }
     document.getElementById("trackTitle").textContent = job.title;
     document.getElementById("cancelBtn").style.display = ["queued", "running"].includes(job.status) ? "block" : "none";
     setProgress(job.progress);

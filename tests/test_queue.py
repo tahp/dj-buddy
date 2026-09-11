@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import unittest
 from pathlib import Path
@@ -78,3 +79,25 @@ class QueueTests(AccountTestMixin, unittest.TestCase):
         self.assertEqual(job['status'], 'error')
         self.assertFalse(temp.exists())
         self.assertFalse(Path(job['final_path']).exists())
+
+    def test_youtube_block_stops_process_and_never_offers_a_file(self):
+        for details in ["HTTP Error 429: Too Many Requests",
+                        "Sign in to confirm you’re not a bot"]:
+            with self.subTest(details=details):
+                job = self.enqueue()
+                real_run = app.run_process
+                def blocked_process(current_job, command):
+                    real_run(current_job, [sys.executable, "-u", "-c",
+                        "import time; print(" + repr(details) + "); time.sleep(60)",
+                        "yt_dlp"])
+                started = time.monotonic()
+                with patch('app.run_process', side_effect=blocked_process):
+                    app.download_worker(job)
+                self.assertLess(time.monotonic() - started, 10)
+                status = self.client.get('/status/' + job['id']).json
+                self.assertEqual(status['status'], 'error')
+                self.assertEqual(status['stage'], 'error')
+                self.assertIn('No MP3 was created', status['error'])
+                self.assertFalse(status['file_available'])
+                self.assertIsNone(job['process'])
+                self.assertFalse(Path(job['final_path']).exists())

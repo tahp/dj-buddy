@@ -41,7 +41,7 @@ python3 -m venv .venv
 Install the audio tools on macOS with Homebrew:
 
 ```bash
-brew install yt-dlp ffmpeg
+brew install node ffmpeg
 ```
 
 Start from the project folder:
@@ -151,3 +151,23 @@ from resetting the bootstrap protection.
 The app still requires one service instance/worker. A shared Postgres database
 does not make the in-memory queue safe for multiple instances. This beta does
 not include a browser password-reset or account-revocation interface yet.
+
+## YouTube download troubleshooting
+
+The downloader needs Node 22 or newer and the `yt-dlp[default]` Python package
+(including its JavaScript challenge solver). The Docker image includes both;
+rebuild and redeploy it to apply these changes. Local runs use yt-dlp from the
+same Python environment as Flask. Update that environment with
+`.venv/bin/python -m pip install -U "yt-dlp[default]"`.
+
+An HTTP 429 or “confirm you’re not a bot” response means YouTube is blocking
+server requests. Installing the JavaScript runtime does not guarantee removal
+of that block. The app stops preparation, reports that no MP3 was created, and
+leaves saving unavailable. Embedded previews stream through the visitor’s
+browser and can work even when server downloads fail. A persistent hosting-IP
+block requires an operational change to where downloads run; repeatedly
+redeploying the same app is not a reliable fix.
+
+Do not commit browser cookie exports or bake them into Docker images. The app
+does not automatically load local cookie files or share a browser login with
+beta users.

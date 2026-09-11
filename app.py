@@ -12,6 +12,7 @@ from auth import init_auth, database
 
 import json
 import subprocess
+import sys
 import os
 import uuid
 import threading
@@ -241,6 +242,19 @@ def stop_process(process):
             pass
 
 
+YOUTUBE_BLOCK_MESSAGE = (
+    "YouTube is blocking downloads from this server. No MP3 was created. "
+    "Previews may still play because they stream directly from YouTube. "
+    "Please try again later."
+)
+
+
+def youtube_blocked(details):
+    details = details.lower()
+    return ("http error 429" in details
+            or ("confirm you" in details and "bot" in details))
+
+
 def run_process(job, command):
     if job["cancelled"]:
         raise RuntimeError("Download cancelled.")
@@ -270,12 +284,18 @@ def run_process(job, command):
             if temp_size > app.config["MAX_TEMP_BYTES"]:
                 raise RuntimeError("Source audio exceeds the 200 MB beta limit.")
             try:
-                add_log(job, output.get(timeout=0.2))
+                line = output.get(timeout=0.2)
+                add_log(job, line)
+                if "yt_dlp" in command and youtube_blocked(line):
+                    raise RuntimeError(YOUTUBE_BLOCK_MESSAGE)
             except queue.Empty:
                 pass
             if process.poll() is not None and not reader.is_alive() and output.empty():
                 break
         if process.returncode:
+            details = "\n".join(job["log"][-30:]).lower()
+            if "yt_dlp" in command and youtube_blocked(details):
+                raise RuntimeError(YOUTUBE_BLOCK_MESSAGE)
             raise RuntimeError("Track processing failed. See the technical log for details.")
     finally:
         stop_process(process)
@@ -300,7 +320,7 @@ def download_worker(job):
             temp_dir.mkdir(parents=True, exist_ok=True)
             Path(job["final_path"]).parent.mkdir(parents=True, exist_ok=True)
             update_job(job, status="running", stage="searching", progress=10, message="Checking track…")
-            run_process(job, ["yt-dlp", "--ignore-config", "--no-playlist", "--skip-download",
+            run_process(job, [sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "--ignore-config", "--no-playlist", "--skip-download",
                               "--write-info-json", "--socket-timeout", "15", "--retries", "2",
                               "-o", str(temp_dir / "audio.%(ext)s"), job["source_url"]])
             metadata = json.loads((temp_dir / "audio.info.json").read_text())
@@ -312,7 +332,7 @@ def download_worker(job):
             if stored_bytes(job["owner_id"]) + duration * 40000 + 1024 * 1024 > app.config["MAX_STORED_BYTES"]:
                 raise RuntimeError("This track would exceed your 500 MB storage limit. Delete some downloads first.")
             update_job(job, stage="downloading", progress=25, message="Downloading selected track…")
-            run_process(job, ["yt-dlp", "--ignore-config", "--no-playlist", "--socket-timeout", "15",
+            run_process(job, [sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "--ignore-config", "--no-playlist", "--socket-timeout", "15",
                               "--retries", "2", "--max-filesize", str(app.config["MAX_TEMP_BYTES"]),
                               "-f", "bestaudio/best", "-o", job["temp_template"], job["source_url"]])
             files = [path for path in temp_dir.glob("audio.*")
@@ -348,7 +368,7 @@ def search():
         return jsonify({"error": "Enter an artist or track name (up to 300 characters)."}), 400
     try:
         result = subprocess.run(
-            ["yt-dlp", "--ignore-config", "--flat-playlist", "--dump-single-json",
+            [sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "--ignore-config", "--flat-playlist", "--dump-single-json",
              "--no-warnings", "--socket-timeout", "15", f"ytsearch5:{title.strip()}"],
             capture_output=True, text=True, timeout=40, check=True
         )
